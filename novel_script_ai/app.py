@@ -12,7 +12,7 @@ if "messages" not in st.session_state:
 if "result_text" not in st.session_state:
     st.session_state.result_text = ""
 
-# 页面样式
+# 松间雾配色
 st.set_page_config(page_title="网文+短剧AI生成器", layout="wide", page_icon="📝")
 css = """
 <style>
@@ -85,7 +85,6 @@ with left_bar:
                     prompt = f"""原文仿写不抄袭，原文：{user_input}，题材{novel_theme}，爽点{novel_hot}"""
                 res = llm.invoke(prompt)
                 content = res.content
-                # 全新生成 → 直接覆盖结果框
                 st.session_state.result_text = content
                 st.session_state.messages.append(HumanMessage(content=f"新建生成：{mode} {user_input}"))
                 st.session_state.messages.append(AIMessage(content=content))
@@ -99,7 +98,6 @@ with right_area:
     c1,c2 = st.columns(2)
     with c1:
         if st.session_state.result_text:
-            # 下载=当前完整全文（初稿+全部续写拼接）
             st.download_button("💾 下载 TXT", st.session_state.result_text,
                                file_name=f"AI剧本_{datetime.datetime.now().strftime('%m%d%H%M')}.txt", use_container_width=True)
     with c2:
@@ -125,15 +123,21 @@ with right_area:
                 new_txt = resp.content
                 st.markdown(new_txt)
                 st.session_state.messages.append(AIMessage(content=new_txt))
-                # 续写/改稿 → 追加到结果框末尾
                 st.session_state.result_text += f"\n\n{new_txt}"
 
     st.divider()
-    st.subheader("📜 创作历史记录（全部过往记录）")
+    st.subheader("📜 创作历史记录（全部过往记录｜点击按钮回填到结果）")
     chat_container = st.container(height=200)
     with chat_container:
-        for msg in st.session_state.messages:
+        for idx, msg in enumerate(st.session_state.messages):
             if isinstance(msg, HumanMessage):
                 st.chat_message("user", avatar="📝").write(msg.content)
             else:
-                st.chat_message("assistant", avatar="🤖").write(msg.content)
+                col_msg, col_btn = st.columns([0.82,0.18])
+                with col_msg:
+                    st.chat_message("assistant", avatar="🤖").write(msg.content)
+                with col_btn:
+                    # 新增回填按钮：云端打开网页后，点按钮把历史内容填入生成结果
+                    if st.button(f"回填{idx}",key=f"fill_{idx}"):
+                        st.session_state.result_text = msg.content
+                        st.rerun()
