@@ -80,13 +80,15 @@ with left_bar:
                 res = llm.invoke(prompt)
                 content = res.content
                 st.session_state.result_text = content
-            # 生成完毕强制刷新页面，文本框立刻加载内容
             st.rerun()
 
 with right_area:
     st.subheader("📄 生成结果")
-    # value绑定变量，rerun后自动渲染
-    st.text_area("最终内容", value=st.session_state.result_text, height=300, key="result_box")
+    # 关键：改用markdown渲染内容，不会出现渲染空白BUG
+    if st.session_state.result_text.strip():
+        st.markdown(st.session_state.result_text)
+    else:
+        st.info("暂无内容，点击左侧开始生成")
 
     c1,c2 = st.columns(2)
     with c1:
@@ -111,5 +113,4 @@ with right_area:
             resp = llm.invoke(prompt)
             new_txt = resp.content
             st.session_state.result_text += f"\n\n{new_txt}"
-        # 续写完成强制刷新，追加内容立刻显示
         st.rerun()
