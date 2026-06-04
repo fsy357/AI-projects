@@ -138,7 +138,6 @@ with right_area:
     c1, c2 = st.columns(2)
     with c1:
         if st.session_state.result_text:
-            # 修复datetime报错：datetime.datetime.now
             st.download_button("💾 下载 TXT", st.session_state.result_text,
                                file_name=f"AI创作_{datetime.datetime.now().strftime('%m%d%H%M')}.txt", use_container_width=True)
     with c2:
