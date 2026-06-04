@@ -11,10 +11,8 @@ st.set_page_config(page_title="网文+短剧AI生成器", layout="wide", page_ic
 css = """
 <style>
 .block-container { padding:0.5rem 0.8rem !important; max-width:100% !important; }
-/* 侧边完全清除上下空白 */
 section[data-testid="stSidebar"] { padding-top:0px !important; padding-bottom:0px !important; }
 section[data-testid="stSidebar"] > div { padding:0 !important; }
-/* 左右卡片配色+紧凑内边距 */
 [data-testid="stColumn"]:first-child > div > div {background:#b4cfc2;border-radius:14px;padding:12px 14px;box-shadow:0 2px 5px rgba(180,207,194,0.3);margin-bottom:0.6rem;}
 [data-testid="stColumn"]:nth-child(2) > div > div {background:#92b8a7;border-radius:14px;padding:12px 14px;box-shadow:0 2px 5px rgba(146,184,167,0.3);margin-bottom:0.6rem;}
 .stTextInput>div>div>input,.stTextArea>div>div>textarea,.stSelectbox>div>div{background:#d1e4dd;border:1px solid #b4cfc2;}
@@ -26,7 +24,6 @@ h1,h2,h3{color:#3a504a;margin:0.3rem 0 0.5rem 0;}
 """
 st.markdown(css, unsafe_allow_html=True)
 
-# 只保留结果文本
 if "result_text" not in st.session_state:
     st.session_state.result_text = ""
 
@@ -36,7 +33,6 @@ st.divider()
 
 left_bar, right_area = st.columns([0.35, 0.65])
 
-# 左侧配置
 with left_bar:
     st.subheader("⚙️ 全局设置")
     api_key = st.text_input("🔐 DeepSeek / OpenAI API Key", type="password", placeholder="填入个人密钥，仅网页临时生效")
@@ -67,7 +63,6 @@ with left_bar:
         user_input = st.text_area("粘贴热门小说片段", height=110, placeholder="粘贴你要仿写的热门小说段落", key="inp3")
 
     st.divider()
-    # 全新生成：直接覆盖结果
     if st.button("🚀 开始生成", type="primary", use_container_width=True):
         if not api_key:
             st.error("请先输入 API Key！")
@@ -85,11 +80,12 @@ with left_bar:
                 res = llm.invoke(prompt)
                 content = res.content
                 st.session_state.result_text = content
-                st.success("生成完成，内容已展示在右侧结果框")
+            # 生成完毕强制刷新页面，文本框立刻加载内容
+            st.rerun()
 
-# 右侧：只保留结果+下载+续稿，**删掉历史整段**
 with right_area:
     st.subheader("📄 生成结果")
+    # value绑定变量，rerun后自动渲染
     st.text_area("最终内容", value=st.session_state.result_text, height=300, key="result_box")
 
     c1,c2 = st.columns(2)
@@ -115,4 +111,5 @@ with right_area:
             resp = llm.invoke(prompt)
             new_txt = resp.content
             st.session_state.result_text += f"\n\n{new_txt}"
-            st.rerun()
+        # 续写完成强制刷新，追加内容立刻显示
+        st.rerun()
