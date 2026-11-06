@@ -14,6 +14,33 @@ def clear_draft():
     st.session_state.draft = ""
     st.session_state.draft_editor = ""
 
+
+def continue_or_revise():
+    """Run before widgets render, so updating the editor key is safe."""
+    current = st.session_state.get("draft_editor", "").strip()
+    instruction = st.session_state.get("followup_request", "").strip()
+    if not instruction:
+        st.session_state.followup_error = "请先填写本次续写 / 修改要求。"
+        return
+    if len(current) > 16000:
+        st.session_state.followup_error = "草稿超过 16,000 字符，请先精简再修改。"
+        return
+    try:
+        prompt = (
+            "沿用既有人物、设定和文风，完成用户要求。不要重复已有内容。\n\n"
+            f"已有草稿：\n{current}\n\n本次要求：\n{instruction}"
+        )
+        result = call_model(prompt, float(st.session_state.get("temperature", 0.7)))
+        st.session_state.draft_editor = current + "\n\n" + result
+        st.session_state.draft = st.session_state.draft_editor
+        st.session_state.followup_error = ""
+    except Exception as exc:
+        detail = str(exc)
+        secret = get_secret("DEEPSEEK_API_KEY")
+        if secret:
+            detail = detail.replace(secret, "[密钥已隐藏]")
+        st.session_state.followup_error = f"{type(exc).__name__}: {detail[:800]}"
+
 PALETTE_CSS = """
 <style>
 :root { --ink:#29483f; --muted:#527267; --mint:#d1e4dd; --sage:#b4cfc2;
@@ -121,7 +148,7 @@ with st.sidebar:
     keywords = st.text_input("关键词 / 情绪爽点", placeholder="反转、成长、复仇……")
     request = st.text_area("本次具体要求", height=130, placeholder="写清楚这一轮要产出什么、避免什么")
     length = st.select_slider("篇幅", options=["短", "中", "长"], value="中")
-    temperature = st.slider("创意程度", 0.1, 1.2, 0.7, 0.1)
+    temperature = st.slider("创意程度", 0.1, 1.2, 0.7, 0.1, key="temperature")
     generate = st.button("✦ 生成初稿", type="primary", use_container_width=True)
     st.caption("密钥由本地 .env 或部署 Secrets 提供，网页不接收也不展示密钥。")
 
@@ -162,23 +189,11 @@ followup_request = st.text_area(
 
 a, b, c = st.columns(3)
 with a:
-    if st.button("继续写 / 修改", use_container_width=True, disabled=not st.session_state.draft.strip()):
-        if not followup_request.strip():
-            st.warning("请先填写本次续写 / 修改要求。")
-        elif len(st.session_state.draft) > 16000:
-            st.warning("草稿太长，暂时无法整体带入修改；请先缩短草稿。")
-        else:
-            followup = f"沿用既有人物、设定和文风，完成用户要求。不要重复已有内容。\n\n已有草稿：\n{st.session_state.draft}\n\n本次要求：\n{followup_request.strip()}"
-            try:
-                with st.spinner("正在续写或修改…"):
-                    addition = call_model(followup, temperature)
-                st.session_state.draft += "\n\n" + addition
-                st.session_state.draft_editor = st.session_state.draft
-                st.rerun()
-            except Exception as exc:
-                st.error("续写请求失败。请根据下面的错误信息排查：")
-                safe_detail = str(exc).replace(get_secret("DEEPSEEK_API_KEY"), "[密钥已隐藏]") if get_secret("DEEPSEEK_API_KEY") else str(exc)
-                st.code(f"{type(exc).__name__}: {safe_detail[:800]}")
+    st.button("继续写 / 修改", use_container_width=True,
+              disabled=not st.session_state.draft.strip(), on_click=continue_or_revise)
+    if st.session_state.get("followup_error"):
+        st.error("续写请求未完成，请根据错误信息排查：")
+        st.code(st.session_state.followup_error)
 with b:
     st.download_button("下载 Markdown", data=st.session_state.draft,
                        file_name=f"青笺创作_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.md",
