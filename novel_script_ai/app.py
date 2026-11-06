@@ -54,12 +54,22 @@ st.markdown(PALETTE_CSS, unsafe_allow_html=True)
 
 
 def get_secret(name: str, default: str = "") -> str:
-    """Read a secret from Streamlit Cloud secrets first, then local environment."""
+    """Read local .env/environment first; consult Streamlit secrets only when configured."""
+    local_value = os.getenv(name)
+    if local_value:
+        return str(local_value).strip()
+
+    secret_files = [
+        os.path.join(os.getcwd(), ".streamlit", "secrets.toml"),
+        os.path.join(os.path.expanduser("~"), ".streamlit", "secrets.toml"),
+    ]
+    if not any(os.path.isfile(path) for path in secret_files):
+        return default
     try:
         value = st.secrets.get(name, default)
     except Exception:
         value = default
-    return str(value or os.getenv(name, default)).strip()
+    return str(value or default).strip()
 
 
 def build_prompt(mode: str, theme: str, protagonist: str, setting: str,
@@ -142,16 +152,23 @@ if generate:
 st.markdown("#### 可编辑初稿")
 st.text_area("生成内容（可直接修改）", height=430, label_visibility="collapsed", key="draft_editor")
 st.session_state.draft = st.session_state.draft_editor
+followup_request = st.text_area(
+    "本次续写 / 修改要求",
+    key="followup_request",
+    height=100,
+    placeholder="例如：续写主角发现线索后的调查过程；或把这段对话改得更克制。",
+    help="这里的要求只用于下方的“继续写 / 修改”，与左侧初稿要求分开。",
+)
 
 a, b, c = st.columns(3)
 with a:
     if st.button("继续写 / 修改", use_container_width=True, disabled=not st.session_state.draft.strip()):
-        if not request.strip():
-            st.warning("请在左侧填写本次续写或修改要求。")
+        if not followup_request.strip():
+            st.warning("请先填写本次续写 / 修改要求。")
         elif len(st.session_state.draft) > 16000:
             st.warning("草稿太长，暂时无法整体带入修改；请先缩短草稿。")
         else:
-            followup = f"沿用既有人物、设定和文风，完成用户要求。不要重复已有内容。\n\n已有草稿：\n{st.session_state.draft}\n\n本次要求：\n{request}"
+            followup = f"沿用既有人物、设定和文风，完成用户要求。不要重复已有内容。\n\n已有草稿：\n{st.session_state.draft}\n\n本次要求：\n{followup_request.strip()}"
             try:
                 with st.spinner("正在续写或修改…"):
                     addition = call_model(followup, temperature)
@@ -159,7 +176,9 @@ with a:
                 st.session_state.draft_editor = st.session_state.draft
                 st.rerun()
             except Exception as exc:
-                st.error(str(exc) if isinstance(exc, ValueError) else "续写失败，请检查网络和 API 配置。")
+                st.error("续写请求失败。请根据下面的错误信息排查：")
+                safe_detail = str(exc).replace(get_secret("DEEPSEEK_API_KEY"), "[密钥已隐藏]") if get_secret("DEEPSEEK_API_KEY") else str(exc)
+                st.code(f"{type(exc).__name__}: {safe_detail[:800]}")
 with b:
     st.download_button("下载 Markdown", data=st.session_state.draft,
                        file_name=f"青笺创作_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.md",
