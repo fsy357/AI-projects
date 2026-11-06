@@ -26,12 +26,22 @@ def continue_or_revise():
         st.session_state.followup_error = "草稿超过 16,000 字符，请先精简再修改。"
         return
     try:
-        prompt = (
-            "沿用既有人物、设定和文风，完成用户要求。不要重复已有内容。\n\n"
-            f"已有草稿：\n{current}\n\n本次要求：\n{instruction}"
-        )
+        action = st.session_state.get("followup_action", "续写（接在原文后）")
+        if action.startswith("修改"):
+            prompt = (
+                "请直接修改并重写下面的完整文本，严格按用户要求处理。"
+                "保留未要求修改的内容和原有人物设定。只输出修改后的完整文本，"
+                "不要解释，也不要在原文后追加说明。\n\n"
+                f"需要修改的原文：\n{current}\n\n修改要求：\n{instruction}"
+            )
+        else:
+            prompt = (
+                "请从已有文本的结尾继续创作，只输出紧接原文的新内容。"
+                "不要重复已有段落，保持人物、设定和文风一致。\n\n"
+                f"已有文本：\n{current}\n\n续写要求：\n{instruction}"
+            )
         result = call_model(prompt, float(st.session_state.get("temperature", 0.7)))
-        st.session_state.draft_editor = current + "\n\n" + result
+        st.session_state.draft_editor = result if action.startswith("修改") else current + "\n\n" + result
         st.session_state.draft = st.session_state.draft_editor
         st.session_state.followup_error = ""
     except Exception as exc:
@@ -186,10 +196,17 @@ followup_request = st.text_area(
     placeholder="例如：续写主角发现线索后的调查过程；或把这段对话改得更克制。",
     help="这里的要求只用于下方的“继续写 / 修改”，与左侧初稿要求分开。",
 )
+st.radio(
+    "选择操作",
+    ["续写（接在原文后）", "修改（替换原文）"],
+    horizontal=True,
+    key="followup_action",
+    help="续写会把新段落接在原文后；修改会让模型重写全文并替换当前草稿。",
+)
 
 a, b, c = st.columns(3)
 with a:
-    st.button("继续写 / 修改", use_container_width=True,
+    st.button("执行续写 / 修改", use_container_width=True,
               disabled=not st.session_state.draft.strip(), on_click=continue_or_revise)
     if st.session_state.get("followup_error"):
         st.error("续写请求未完成，请根据错误信息排查：")
